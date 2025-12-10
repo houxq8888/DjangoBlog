@@ -1,10 +1,14 @@
 import logging
 import time
+import threading
 
 from ipware import get_client_ip
 from user_agents import parse
 
 from blog.documents import ELASTICSEARCH_ENABLED, ElaspedTimeDocumentManager
+
+# 全局threading.local对象存储当前请求
+local = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +20,9 @@ class OnlineMiddleware(object):
 
     def __call__(self, request):
         ''' page render time '''
+        # 保存request对象到threading.local
+        local.request = request
+        
         start_time = time.time()
         response = self.get_response(request)
         http_user_agent = request.META.get('HTTP_USER_AGENT', '')

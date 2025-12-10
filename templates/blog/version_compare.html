@@ -1,0 +1,114 @@
+{% extends 'share_layout/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans 'Version Compare' %}{% endblock %}
+
+{% block main %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="page-header">
+                <h1>{% trans 'Version Compare' %}</h1>
+            </div>
+            
+            {% if error %}
+            <div class="alert alert-danger">
+                {{ error }}
+            </div>
+            {% else %}
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        {% trans 'Compare' %}: {{ version1.article.title }}
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>{% trans 'Version' %} {{ version1.version_number }}:</strong> {{ version1.created_time }} by {{ version1.editor.username }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>{% trans 'Version' %} {{ version2.version_number }}:</strong> {{ version2.created_time }} by {{ version2.editor.username }}</p>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h4>{% trans 'Title Differences' %}</h4>
+                    <div class="diff-container">
+                        {% if title_diff %}
+                            {{ title_diff|safe }}
+                        {% else %}
+                            <p class="text-success">{% trans 'No differences in title' %}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <hr>
+                    
+                    <h4>{% trans 'Content Differences' %}</h4>
+                    <div class="diff-container">
+                        {% if content_diff %}
+                            {{ content_diff|safe }}
+                        {% else %}
+                            <p class="text-success">{% trans 'No differences in content' %}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="{% url 'admin:blog_articleversion_changelist' %}?article__id__exact={{ version1.article.id }}" class="btn btn-default">{% trans 'Back to Versions List' %}</a>
+                            <a href="{% url 'blog:article_version_restore' version1.id %}" class="btn btn-warning" onclick="return confirm('{% trans 'Are you sure you want to restore to this version?' %}')">{% trans 'Restore to Version' %} {{ version1.version_number }}</a>
+                        </div>
+                        <div class="col-md-6 text-right">
+                            <a href="{% url 'blog:article_version_restore' version2.id %}" class="btn btn-warning" onclick="return confirm('{% trans 'Are you sure you want to restore to this version?' %}')">{% trans 'Restore to Version' %} {{ version2.version_number }}</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.diff-container {
+    background: #f8f8f8;
+    padding: 15px;
+    border-radius: 4px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.diff-header {
+    color: #333;
+    font-weight: bold;
+    background: #eaeaea;
+    padding: 2px 5px;
+}
+
+.diff-range {
+    color: #888;
+    background: #f0f0f0;
+    padding: 2px 5px;
+}
+
+.diff-add {
+    color: #22863a;
+    background: #f0fff4;
+}
+
+.diff-remove {
+    color: #cb2431;
+    background: #ffeef0;
+}
+
+.diff-context {
+    color: #586069;
+}
+</style>
+{% endblock %}

@@ -3,6 +3,7 @@ import re
 from abc import abstractmethod
 
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
@@ -133,7 +134,47 @@ class Article(BaseModel):
         return names
 
     def save(self, *args, **kwargs):
+        # 获取当前登录用户
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        from django.contrib.auth.models import AnonymousUser
+        from django.db.models import Max
+        
+        # 在保存新版本之前，先检查是否是新建文章或者内容有变化
+        create_version = kwargs.pop('create_version', True)
+        
+        # 调用父类保存方法
         super().save(*args, **kwargs)
+        
+        if create_version:
+            try:
+                # 获取当前请求的用户
+                from django.contrib.auth.middleware import get_user
+                from blog.middleware import local
+                request = local.request if hasattr(local, 'request') else None
+                if request:
+                    user = get_user(request)
+                else:
+                    user = None
+            except:
+                user = None
+            
+            # 如果无法获取当前用户，则使用文章作者
+            if not user or isinstance(user, AnonymousUser):
+                user = self.author
+            
+            # 获取最新版本号
+            latest_version = self.versions.aggregate(Max('version_number'))['version_number__max']
+            new_version_number = latest_version + 1 if latest_version else 1
+            
+            # 创建新版本记录
+            ArticleVersion.objects.create(
+                article=self,
+                version_number=new_version_number,
+                title=self.title,
+                body=self.body,
+                editor=user
+            )
 
     def viewed(self):
         self.views += 1
@@ -238,6 +279,36 @@ class Category(BaseModel):
 
         parse(self)
         return categorys
+
+
+class ArticleVersion(BaseModel):
+    """文章版本历史"""
+    article = models.ForeignKey(
+        Article,
+        verbose_name=_('article'),
+        on_delete=models.CASCADE,
+        related_name='versions'
+    )
+    version_number = models.PositiveIntegerField(_('version number'), default=1)
+    title = models.CharField(_('title'), max_length=200)
+    body = MDTextField(_('body'))
+    editor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name=_('editor'),
+        on_delete=models.CASCADE
+    )
+    comment = models.CharField(_('version comment'), max_length=200, blank=True, null=True, help_text=_('Brief description of changes in this version'))
+
+    def __str__(self):
+        if self.comment:
+            return f"{self.article.title} - Version {self.version_number}: {self.comment}"
+        return f"{self.article.title} - Version {self.version_number}"
+
+    class Meta:
+        ordering = ['-version_number']
+        verbose_name = _('article version')
+        verbose_name_plural = _('article versions')
+        unique_together = ('article', 'version_number')
 
 
 class Tag(BaseModel):

@@ -378,3 +378,109 @@ def permission_denied_view(
 def clean_cache_view(request):
     cache.clear()
     return HttpResponse('ok')
+
+
+def article_version_compare(request):
+    """
+    对比两个文章版本的差异
+    """
+    import difflib
+    from django.contrib.admin.views.decorators import staff_member_required
+    from blog.models import ArticleVersion
+    
+    @staff_member_required
+    def inner(request):
+        version1_id = request.GET.get('v1')
+        version2_id = request.GET.get('v2')
+        
+        if not version1_id or not version2_id:
+            return render(request, 'blog/version_compare.html', {'error': '请选择两个版本进行对比'})
+        
+        version1 = get_object_or_404(ArticleVersion, pk=version1_id)
+        version2 = get_object_or_404(ArticleVersion, pk=version2_id)
+        
+        # 对比标题
+        title_diff = list(difflib.unified_diff(
+            version1.title.splitlines(),
+            version2.title.splitlines(),
+            fromfile=f'版本 {version1.version_number} ({version1.created_time.strftime("%Y-%m-%d %H:%M")})',
+            tofile=f'版本 {version2.version_number} ({version2.created_time.strftime("%Y-%m-%d %H:%M")})',
+            lineterm=''
+        ))
+        
+        # 对比正文
+        content_diff = list(difflib.unified_diff(
+            version1.body.splitlines(),
+            version2.body.splitlines(),
+            fromfile=f'版本 {version1.version_number} ({version1.created_time.strftime("%Y-%m-%d %H:%M")})',
+            tofile=f'版本 {version2.version_number} ({version2.created_time.strftime("%Y-%m-%d %H:%M")})',
+            lineterm=''
+        ))
+        
+        # 转换为HTML格式高亮显示
+        def diff_to_html(diff_lines):
+            html = []
+            for line in diff_lines:
+                if line.startswith('+++') or line.startswith('---'):
+                    html.append(f'<div class="diff-header">{line}</div>')
+                elif line.startswith('@@'):
+                    html.append(f'<div class="diff-range">{line}</div>')
+                elif line.startswith('+'):
+                    html.append(f'<div class="diff-add">{line}</div>')
+                elif line.startswith('-'):
+                    html.append(f'<div class="diff-remove">{line}</div>')
+                elif line.startswith(' '):
+                    html.append(f'<div class="diff-context">{line}</div>')
+                else:
+                    html.append(f'<div class="diff-other">{line}</div>')
+            return '\n'.join(html)
+        
+        title_diff_html = diff_to_html(title_diff)
+        content_diff_html = diff_to_html(content_diff)
+        
+        return render(request, 'blog/version_compare.html', {
+            'version1': version1,
+            'version2': version2,
+            'title_diff': title_diff_html,
+            'content_diff': content_diff_html
+        })
+    
+    return inner(request)
+
+
+def article_version_restore(request, version_id):
+    """
+    恢复到指定版本
+    """
+    from django.contrib.admin.views.decorators import staff_member_required
+    from django.http import HttpResponseRedirect
+    from blog.models import ArticleVersion
+    
+    @staff_member_required
+    def inner(request, version_id):
+        version = get_object_or_404(ArticleVersion, pk=version_id)
+        article = version.article
+        
+        # 保存当前版本作为历史记录
+        ArticleVersion.objects.create(
+            article=article,
+            title=article.title,
+            body=article.body,
+            editor=request.user,
+            comment="恢复前的版本"
+        )
+        # 恢复到旧版本
+        article.title = version.title
+        article.body = version.body
+        # 恢复版本的编辑者为版本原始editor
+        article.author = version.editor
+        # 手动创建恢复版本的记录，明确说明是从哪个版本恢复的
+        article.save(create_version=True)
+        # 再创建一个恢复记录说明
+        latest_version = ArticleVersion.objects.filter(article=article).order_by('-version_number').first()
+        latest_version.comment = f"从版本 {version.version_number} 恢复"
+        latest_version.save()
+        messages.success(request, _('Version restored successfully'))
+        return redirect('admin:blog_article_change', article.id)
+    
+    return inner(request, version_id)

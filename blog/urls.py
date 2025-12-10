@@ -59,4 +59,12 @@ urlpatterns = [
         r'clean',
         views.clean_cache_view,
         name='clean'),
+    path(
+        r'article/version/compare',
+        views.article_version_compare,
+        name='article_version_compare'),
+    path(
+        r'article/version/restore/<int:version_id>',
+        views.article_version_restore,
+        name='article_version_restore'),
 ]
